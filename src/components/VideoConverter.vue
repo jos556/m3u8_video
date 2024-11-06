@@ -14,9 +14,53 @@
             class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
             placeholder="請輸入 M3U8 網址"
           />
+          <button
+            @click="checkStreams"
+            :disabled="isChecking || !m3u8Url"
+            class="mt-2 inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <span v-if="isChecking">檢查中...</span>
+            <span v-else>檢查可用串流</span>
+          </button>
         </div>
       </div>
 
+      <!-- 可用串流列表 -->
+      <div v-if="availableStreams.length > 0" class="mt-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          可用串流列表
+        </label>
+        <div class="bg-gray-50 p-3 rounded-md space-y-2 max-h-60 overflow-y-auto">
+          <div
+            v-for="(stream, index) in availableStreams"
+            :key="index"
+            class="flex items-center justify-between p-2 hover:bg-gray-100 rounded"
+          >
+            <div class="flex-1">
+              <div class="text-sm font-medium text-gray-900">
+                串流 {{ index + 1 }}
+                <span v-if="stream.resolution" class="ml-2 text-gray-500">
+                  ({{ stream.resolution }})
+                </span>
+                <span v-if="stream.bandwidth" class="ml-2 text-gray-500">
+                  {{ formatBandwidth(stream.bandwidth) }}
+                </span>
+              </div>
+              <div class="text-xs text-gray-500 truncate">
+                {{ stream.url }}
+              </div>
+            </div>
+            <button
+              @click="selectStream(stream.url)"
+              class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              選擇
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 原有的轉換按鈕和進度條等 -->
       <div class="flex space-x-4">
         <button
           @click="startConversion"
@@ -99,6 +143,8 @@ const isConverting = ref(false)
 const progress = ref(0)
 const error = ref(null)
 const outputUrl = ref(null)
+const isChecking = ref(false)
+const availableStreams = ref([])
 
 // 初始化 FFmpeg
 onMounted(async () => {
@@ -249,6 +295,84 @@ const downloadVideo = () => {
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
+}
+
+// 格式化頻寬顯示
+const formatBandwidth = (bandwidth) => {
+  if (!bandwidth) return ''
+  const mbps = bandwidth / 1024 / 1024
+  return `${mbps.toFixed(1)} Mbps`
+}
+
+// 解析 M3U8 中的串流信息
+const parseStreamInfo = (content, baseUrl) => {
+  const lines = content.split('\n')
+  const streams = []
+  let currentStream = {}
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    
+    if (line.startsWith('#EXT-X-STREAM-INF:')) {
+      currentStream = {}
+      // 解析串流信息
+      const attributes = line.substring(18).split(',')
+      attributes.forEach(attr => {
+        const [key, value] = attr.split('=')
+        if (key === 'BANDWIDTH') {
+          currentStream.bandwidth = parseInt(value)
+        } else if (key === 'RESOLUTION') {
+          currentStream.resolution = value
+        }
+      })
+    } else if (line && !line.startsWith('#')) {
+      // 這是串流的 URL
+      currentStream.url = line.startsWith('http') ? line : baseUrl + line
+      streams.push({ ...currentStream })
+    }
+  }
+
+  return streams
+}
+
+// 檢查可用串流
+const checkStreams = async () => {
+  if (!m3u8Url.value || isChecking.value) return
+
+  try {
+    isChecking.value = true
+    availableStreams.value = []
+
+    const response = await fetch(m3u8Url.value)
+    if (!response.ok) {
+      throw new Error('無法下載 M3U8 文件')
+    }
+    const content = await response.text()
+    
+    const baseUrl = m3u8Url.value.substring(0, m3u8Url.value.lastIndexOf('/') + 1)
+    const streams = parseStreamInfo(content, baseUrl)
+    
+    if (streams.length > 0) {
+      availableStreams.value = streams
+    } else {
+      // 如果沒有找到子串流，可能是直接的媒體播放列表
+      availableStreams.value = [{
+        url: m3u8Url.value,
+        resolution: '原始品質',
+        bandwidth: null
+      }]
+    }
+  } catch (err) {
+    error.value = '檢查串流失敗: ' + err.message
+  } finally {
+    isChecking.value = false
+  }
+}
+
+// 選擇串流
+const selectStream = (url) => {
+  m3u8Url.value = url
+  availableStreams.value = [] // 清空列表
 }
 
 // 監聽 FFmpeg 進度
