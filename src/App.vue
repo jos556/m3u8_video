@@ -10,7 +10,10 @@
     <main>
       <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div class="px-4 py-6 sm:px-0">
-          <VideoConverter />
+          <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <VideoConverter />
+            <Settings />
+          </div>
         </div>
       </div>
     </main>
@@ -19,4 +22,5 @@
 
 <script setup>
 import VideoConverter from './components/VideoConverter.vue'
+import Settings from './components/Settings.vue'
 </script> 

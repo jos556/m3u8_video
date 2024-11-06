@@ -4,7 +4,12 @@ export const useConverterStore = defineStore('converter', {
   state: () => ({
     isConverting: false,
     progress: 0,
-    currentFile: null
+    currentFile: null,
+    settings: {
+      quality: 'high',
+      autoDownload: true,
+      fileNamePattern: 'video_{timestamp}'
+    }
   }),
   
   actions: {
@@ -18,6 +23,10 @@ export const useConverterStore = defineStore('converter', {
     
     setCurrentFile(file) {
       this.currentFile = file
+    },
+
+    updateSettings(newSettings) {
+      this.settings = { ...this.settings, ...newSettings }
     }
   }
 }) 
